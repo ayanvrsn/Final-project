@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crowdfund Rewards</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app" class="container">
+      <header class="header">
+        <div>
+          <h1>Crowdfund Rewards</h1>
+          <p class="muted">Vanilla JS + ethers v6 + MetaMask</p>
+        </div>
+        <div class="header-actions">
+          <button id="connectBtn">Connect MetaMask</button>
+          <button id="refreshBtn" disabled>Refresh</button>
+        </div>
+      </header>
+
+      <section class="card" id="walletCard">
+        <div class="row">
+          <div>
+            <div class="label">Wallet</div>
+            <div id="walletAddress">Not connected</div>
+          </div>
+          <div>
+            <div class="label">Network</div>
+            <div id="networkStatus">-</div>
+          </div>
+          <div>
+            <div class="label">ETH</div>
+            <div id="ethBalance">0.0000</div>
+          </div>
+          <div>
+            <div class="label" id="tokenLabel">Token</div>
+            <div id="tokenBalance">0.0000</div>
+          </div>
+        </div>
+        <div id="networkHelp" class="notice warning hidden"></div>
+        <div id="configHelp" class="notice warning hidden"></div>
+      </section>
+
+      <section class="card">
+        <h2>Create Campaign</h2>
+        <div class="form-grid">
+          <div>
+            <label for="titleInput">Title</label>
+            <input id="titleInput" placeholder="My awesome idea" />
+          </div>
+          <div>
+            <label for="goalInput">Goal (ETH)</label>
+            <input id="goalInput" placeholder="0.5" />
+          </div>
+          <div>
+            <label for="deadlineInput">Deadline (dd/mm/yy hh:ss)</label>
+            <input id="deadlineInput" placeholder="06/02/26 18:30" />
+            <div class="hint">Local time. Must be at least 60 seconds in the future.</div>
+            <button id="plusMinuteBtn" class="btn-small" type="button">+1 minute</button>
+          </div>
+        </div>
+        <div class="row">
+          <button id="createBtn" disabled>Create Campaign</button>
+          <div id="deadlineError" class="error"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Status</h2>
+        <div id="statusMessage" class="notice hidden"></div>
+        <div id="errorMessage" class="notice error hidden"></div>
+      </section>
+
+      <section class="card">
+        <div class="row space-between">
+          <h2>Campaigns</h2>
+          <div class="muted" id="campaignCount">0</div>
+        </div>
+        <div id="campaignList" class="campaign-list"></div>
+      </section>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
