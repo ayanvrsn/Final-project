@@ -102,6 +102,56 @@ function getTxLink(hash) {
   return base ? `${base}${hash}` : "";
 }
 
+function parseDeadlineInput(raw) {
+  const value = raw.trim();
+  const match = value.match(/^([0-9]{2})\/([0-9]{2})\/([0-9]{2})\s+([0-9]{2}):([0-9]{2})(?::([0-9]{2}))?$/);
+  if (!match) {
+    return { error: "Invalid format. Use dd/mm/yy hh:ss (24h)." };
+  }
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = 2000 + Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = match[6] ? Number(match[6]) : 0;
+
+  if (month < 1 || month > 12) return { error: "Invalid month." };
+  if (day < 1 || day > 31) return { error: "Invalid day." };
+  if (hour > 23) return { error: "Invalid hour." };
+  if (minute > 59) return { error: "Invalid minutes." };
+  if (second > 59) return { error: "Invalid seconds." };
+
+  const date = new Date(year, month - 1, day, hour, minute, second, 0);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getHours() !== hour ||
+    date.getMinutes() !== minute ||
+    date.getSeconds() !== second
+  ) {
+    return { error: "Invalid date." };
+  }
+
+  const timestamp = Math.floor(date.getTime() / 1000);
+  if (timestamp <= nowSec() + 60) {
+    return { error: "Deadline must be at least 60 seconds in the future." };
+  }
+
+  return { timestamp };
+}
+
+function formatDeadlineInput(date) {
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yy = String(date.getFullYear()).slice(-2);
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${dd}/${mm}/${yy} ${hh}:${min}:${ss}`;
+}
+
 
 
 function formatEth(value) {
@@ -117,6 +167,119 @@ function statusLabel(c) {
   if (c.finalized) return c.successful ? "Successful" : "Failed";
   if (now >= c.deadline) return "Ended (needs finalize)";
   return "Active";
+}
+
+function updateUIState() {
+  ui.connectBtn.disabled = !window.ethereum;
+  ui.refreshBtn.disabled = !state.address || !isAllowedNetwork() || !isContractsReady();
+  ui.createBtn.disabled = !state.address || !isAllowedNetwork() || !isContractsReady();
+
+  if (!window.ethereum) {
+    setError("MetaMask not found. Please install it to continue.");
+  }
+
+  if (!isContractsReady()) {
+    setNotice(ui.configHelp, "Update config.js with deployed contract addresses.", "warning");
+  } else {
+    setNotice(ui.configHelp, "", "warning");
+  }
+
+  if (state.chainId == null) {
+    ui.networkStatus.textContent = "-";
+    setNotice(ui.networkHelp, "", "warning");
+  } else if (!isAllowedNetwork()) {
+    ui.networkStatus.textContent = `Wrong network (${state.chainId})`;
+    setNotice(
+      ui.networkHelp,
+      "Please switch MetaMask to Sepolia (11155111), Holesky (17000), or Localhost (31337).",
+      "warning"
+    );
+  } else {
+    ui.networkStatus.textContent = APP.CHAIN_NAMES[state.chainId] || String(state.chainId);
+    setNotice(ui.networkHelp, "", "warning");
+  }
+
+  ui.walletAddress.textContent = state.address ? state.address : "Not connected";
+}
+
+async function syncWallet(requestAccounts) {
+  if (!window.ethereum) {
+    updateUIState();
+    return;
+  }
+
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  const accounts = await provider.send(requestAccounts ? "eth_requestAccounts" : "eth_accounts", []);
+
+  if (!accounts || accounts.length === 0) {
+    state.provider = provider;
+    state.signer = null;
+    state.address = null;
+    state.chainId = null;
+    state.crowd = null;
+    state.token = null;
+    updateUIState();
+    return;
+  }
+
+  const signer = await provider.getSigner();
+  const net = await provider.getNetwork();
+
+  state.provider = provider;
+  state.signer = signer;
+  state.address = accounts[0];
+  state.chainId = Number(net.chainId);
+
+  if (isContractsReady()) {
+    state.crowd = new ethers.Contract(APP.CROWDFUND_ADDRESS, CROWDFUND_ABI, signer);
+    state.token = new ethers.Contract(APP.TOKEN_ADDRESS, ERC20_ABI, provider);
+  } else {
+    state.crowd = null;
+    state.token = null;
+  }
+
+  updateUIState();
+  await refreshBalances();
+  await loadCampaigns();
+}
+
+async function connectWallet() {
+  setError("");
+  setStatus("");
+  try {
+    await syncWallet(true);
+  } catch (err) {
+    if (err?.code === 4001) {
+      setError("Connection request rejected.");
+      return;
+    }
+    setError(err?.message || "Failed to connect.");
+  }
+}
+
+async function refreshBalances() {
+  if (!state.provider || !state.address) return;
+  try {
+    const balance = await state.provider.getBalance(state.address);
+    ui.ethBalance.textContent = Number(ethers.formatEther(balance)).toFixed(4);
+
+    if (state.token) {
+      const [bal, decimals, symbol] = await Promise.all([
+        state.token.balanceOf(state.address),
+        state.token.decimals(),
+        state.token.symbol()
+      ]);
+      state.tokenDecimals = Number(decimals);
+      state.tokenSymbol = symbol;
+      ui.tokenLabel.textContent = symbol;
+      ui.tokenBalance.textContent = Number(ethers.formatUnits(bal, decimals)).toFixed(4);
+    } else {
+      ui.tokenLabel.textContent = "Token";
+      ui.tokenBalance.textContent = "0.0000";
+    }
+  } catch (err) {
+    setError(err?.message || "Failed to fetch balances.");
+  }
 }
 
 async function loadCampaigns() {
