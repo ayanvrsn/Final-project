@@ -10,6 +10,7 @@ contract Crowdfunding {
         uint256 goalWei;
         uint256 deadline;
         uint256 raisedWei;
+        bool finalized;
         bool successful;
     }
 
@@ -52,6 +53,11 @@ contract Crowdfunding {
         return campaigns[id];
     }
 
+    function getContribution(uint256 id, address user) external view returns (uint256) {
+        if (id >= campaigns.length) revert InvalidId();
+        return contributions[id][user];
+    }
+
     function createCampaign(string calldata title, uint256 goalWei, uint256 deadlineTimestamp) external returns (uint256 id) {
         if (bytes(title).length == 0) revert EmptyTitle();
         if (goalWei == 0) revert InvalidGoal();
@@ -64,6 +70,7 @@ contract Crowdfunding {
                 goalWei: goalWei,
                 deadline: deadlineTimestamp,
                 raisedWei: 0,
+                finalized: false,
                 successful: false
             })
         );
@@ -75,6 +82,7 @@ contract Crowdfunding {
     function contribute(uint256 id) external payable {
         if (id >= campaigns.length) revert InvalidId();
         Campaign storage c = campaigns[id];
+        if (c.finalized) revert AlreadyFinalized();
         if (block.timestamp >= c.deadline) revert DeadlinePassed();
         if (msg.value == 0) revert NoContribution();
 
@@ -83,4 +91,40 @@ contract Crowdfunding {
 
         emit Contributed(id, msg.sender, msg.value, 0);
     }
+
+    function finalize(uint256 id) external {
+        if (id >= campaigns.length) revert InvalidId();
+        Campaign storage c = campaigns[id];
+
+        if (!c.finalized) {
+            if (block.timestamp < c.deadline) revert NotActive();
+
+            c.finalized = true;
+            if (c.raisedWei >= c.goalWei) {
+                c.successful = true;
+                (bool ok, ) = c.creator.call{value: c.raisedWei}("");
+                if (!ok) revert TransferFailed();
+            } else {
+                c.successful = false;
+            }
+
+            emit Finalized(id, c.successful);
+        } else {
+            if (!c.successful) revert AlreadyFinalized();
+        }
+
+        if (c.successful) {
+            uint256 contrib = contributions[id][msg.sender];
+            if (contrib == 0) revert NoContribution();
+            if (rewardClaimed[id][msg.sender]) revert RewardAlreadyClaimed();
+
+            rewardClaimed[id][msg.sender] = true;
+            uint256 reward = (contrib * REWARD_PER_ETH) / 1e18;
+            rewardToken.mint(msg.sender, reward);
+
+            emit RewardClaimed(id, msg.sender, reward);
+        }
+    }
+
+    
 }
