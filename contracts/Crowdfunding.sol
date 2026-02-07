@@ -92,6 +92,22 @@ contract Crowdfunding {
         emit Contributed(id, msg.sender, msg.value, 0);
     }
 
+    function refund(uint256 id) external {
+        if (id >= campaigns.length) revert InvalidId();
+        Campaign storage c = campaigns[id];
+        if (!c.finalized) revert NotFinalized();
+        if (c.successful) revert AlreadyFinalized();
+
+        uint256 amount = contributions[id][msg.sender];
+        if (amount == 0) revert NoContribution();
+        contributions[id][msg.sender] = 0;
+
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        if (!ok) revert TransferFailed();
+
+        emit Refunded(id, msg.sender, amount);
+    }
+
     function finalize(uint256 id) external {
         if (id >= campaigns.length) revert InvalidId();
         Campaign storage c = campaigns[id];
