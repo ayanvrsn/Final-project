@@ -152,7 +152,11 @@ function formatDeadlineInput(date) {
   return `${dd}/${mm}/${yy} ${hh}:${min}:${ss}`;
 }
 
-
+function setPlusOneMinute() {
+  const date = new Date(Date.now() + 60 * 1000);
+  ui.deadlineInput.value = formatDeadlineInput(date);
+  ui.deadlineError.textContent = "";
+}
 
 function formatEth(value) {
   try {
