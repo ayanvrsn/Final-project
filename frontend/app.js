@@ -153,7 +153,7 @@ function formatDeadlineInput(date) {
 }
 
 function setPlusOneMinute() {
-  const date = new Date(Date.now() + 60 * 1000);
+  const date = new Date(Date.now() + 80 * 1000);
   ui.deadlineInput.value = formatDeadlineInput(date);
   ui.deadlineError.textContent = "";
 }
